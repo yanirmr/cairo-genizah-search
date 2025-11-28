@@ -1,0 +1,18 @@
+{% extends "base.html" %}
+
+{% block title %}שגיאה - גניזת קהיר{% endblock %}
+
+{% block content %}
+<div class="error-page">
+    <h1>שגיאה</h1>
+
+    <div class="error-message">
+        {{ error }}
+    </div>
+
+    <div class="error-actions">
+        <a href="/" class="btn btn-primary">עבור לעמוד הבית</a>
+        <a href="javascript:history.back()" class="btn btn-secondary">חזור</a>
+    </div>
+</div>
+{% endblock %}

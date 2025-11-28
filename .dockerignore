@@ -1,0 +1,42 @@
+# Python
+__pycache__/
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+venv/
+env/
+.venv/
+
+# Development
+.pytest_cache/
+.coverage
+.mypy_cache/
+.ruff_cache/
+*.log
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Git
+.git/
+.gitignore
+
+# Tests
+tests/
+htmlcov/
+
+# Documentation
+*.md
+!README.md
+
+# Development files
+requirements-dev.txt

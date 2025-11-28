@@ -1,0 +1,71 @@
+{% extends "base.html" %}
+
+{% block title %}תוצאות חיפוש - גניזת קהיר{% endblock %}
+
+{% block content %}
+<div class="results-page">
+    <div class="search-header">
+        <h1>תוצאות חיפוש</h1>
+        <p class="search-info">
+            שאילתה: <strong>{{ query }}</strong> |
+            סוג: <strong>{{ search_type }}</strong> |
+            נמצאו: <strong>{{ result_count }}</strong> תוצאות
+        </p>
+        <a href="/" class="btn btn-secondary">חיפוש חדש</a>
+    </div>
+
+    {% if result_count == 0 %}
+    <div class="no-results">
+        <p>לא נמצאו תוצאות לשאילתה שלך.</p>
+        <p>נסה:</p>
+        <ul>
+            <li>להשתמש במונחי חיפוש שונים</li>
+            <li>לבדוק את האיות</li>
+            <li>להשתמש במונחי חיפוש רחבים יותר</li>
+            <li>לנסות סוג חיפוש אחר</li>
+        </ul>
+    </div>
+    {% else %}
+    <div class="results-list">
+        {% for result in results %}
+        <div class="result-item">
+            <div class="result-header">
+                <h3>
+                    <a href="/document/{{ result.doc_id }}">{{ result.doc_id }}</a>
+                </h3>
+                <span class="result-score">ציון: {{ "%.2f"|format(result.score) }}</span>
+            </div>
+
+            <div class="result-meta">
+                <span class="meta-item">
+                    <strong>שורות:</strong> {{ result.line_count }}
+                </span>
+                <span class="meta-item">
+                    <strong>הערות:</strong>
+                    {% if result.has_annotations %}
+                    <span class="badge badge-yes">כן</span>
+                    {% else %}
+                    <span class="badge badge-no">לא</span>
+                    {% endif %}
+                </span>
+            </div>
+
+            {% if result.highlights %}
+            <div class="result-snippet rtl-text">
+                {{ result.highlights|safe }}
+            </div>
+            {% else %}
+            <div class="result-content rtl-text">
+                {{ result.content[:300] }}{% if result.content|length > 300 %}...{% endif %}
+            </div>
+            {% endif %}
+
+            <div class="result-actions">
+                <a href="/document/{{ result.doc_id }}" class="btn btn-small">צפה במסמך המלא</a>
+            </div>
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+</div>
+{% endblock %}

@@ -1,0 +1,8 @@
+# Production dependencies only
+flask>=3.0.0
+whoosh>=2.7.4
+python-bidi>=0.4.2
+arabic-reshaper>=3.0.0
+pyyaml>=6.0
+click>=8.1.0
+gunicorn>=21.0.0

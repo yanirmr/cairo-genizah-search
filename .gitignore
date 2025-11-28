@@ -1,0 +1,76 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+
+# Virtual environments
+venv/
+env/
+ENV/
+.venv
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+.tox/
+
+# Mypy
+.mypy_cache/
+.dmypy.json
+dmypy.json
+
+# Search index (will be generated)
+*.idx
+
+# Logs
+*.log
+
+# Environment variables
+.env
+.env.local
+
+# Database files (if any)
+*.db
+*.sqlite
+*.sqlite3
+
+# Exclude large data file - will be uploaded separately
+GenizaTranscriptions.txt
+
+# Index will be built on deployment
+index/
+
+# Coverage files
+.coverage*
+
+# Claude settings
+.claude/
+
+# GitHub workflows (add later if needed)
+.github/

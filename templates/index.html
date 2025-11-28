@@ -1,0 +1,173 @@
+{% extends "base.html" %}
+
+{% block title %}חיפוש - גניזת קהיר{% endblock %}
+
+{% block content %}
+<div class="search-page">
+    <h1>חיפוש תעתיקי גניזת קהיר</h1>
+
+    {% if error %}
+    <div class="error-message">
+        <strong>שגיאה:</strong> {{ error }}
+    </div>
+    {% endif %}
+
+    <form action="/search" method="GET" class="search-form">
+        <div class="form-group">
+            <input
+                type="text"
+                name="q"
+                placeholder="הזן שאילתת חיפוש (למשל: שבת, מעשרות, או מזהה מסמך)"
+                class="search-input"
+                autofocus
+                required
+            >
+        </div>
+
+        <div class="search-options">
+            <div class="form-row">
+                <div class="form-group">
+                    <label for="type">סוג חיפוש:</label>
+                    <select name="type" id="type" class="select-input">
+                        <option value="fulltext">חיפוש טקסט מלא</option>
+                        <option value="docid">מזהה מסמך</option>
+                        <option value="regex">דפוס רגולרי</option>
+                    </select>
+                </div>
+
+                <div class="form-group">
+                    <label for="limit">מגבלת תוצאות:</label>
+                    <select name="limit" id="limit" class="select-input">
+                        <option value="10" selected>10</option>
+                        <option value="25">25</option>
+                        <option value="50">50</option>
+                        <option value="100">100</option>
+                    </select>
+                </div>
+            </div>
+
+            <details class="advanced-options">
+                <summary>מסננים מתקדמים</summary>
+
+                <div class="form-row">
+                    <div class="form-group">
+                        <label for="annotations">הערות:</label>
+                        <select name="annotations" id="annotations" class="select-input">
+                            <option value="">הכל</option>
+                            <option value="yes">עם הערות</option>
+                            <option value="no">ללא הערות</option>
+                        </select>
+                    </div>
+
+                    <div class="form-group">
+                        <label for="min_lines">מינימום שורות:</label>
+                        <input type="number" name="min_lines" id="min_lines" min="1" class="number-input">
+                    </div>
+
+                    <div class="form-group">
+                        <label for="max_lines">מקסימום שורות:</label>
+                        <input type="number" name="max_lines" id="max_lines" min="1" class="number-input">
+                    </div>
+                </div>
+            </details>
+        </div>
+
+        <button type="submit" class="btn btn-primary">חפש</button>
+    </form>
+
+    <div class="help-section">
+        <h3>דוגמאות חיפוש:</h3>
+        <ul>
+            <li><strong>טקסט עברי:</strong> שבת, חלה, מעשרות</li>
+            <li><strong>מזהה מסמך:</strong> IE104549337 (השתמש בסוג חיפוש "מזהה מסמך")</li>
+            <li><strong>רגולר:</strong> Line \d+ (השתמש בסוג חיפוש "דפוס רגולרי")</li>
+            <li><strong>בוליאני:</strong> שבת AND חלה (חיפוש טקסט מלא)</li>
+        </ul>
+    </div>
+
+    <div class="credits-section">
+        <h3>אודות כלי החיפוש</h3>
+        <p>
+            כלי חיפוש זה פותח על ידי <strong>יניר מרמור</strong> לצורך גישה נוחה ומהירה לפרויקט החשוב והמקיף
+            <a href="https://zenodo.org/records/17734473" target="_blank" rel="noopener">MiDRASH - תעתיקים אוטומטיים של שברי גניזת קהיר</a>.
+        </p>
+
+        <h4>פרויקט MiDRASH</h4>
+        <p>
+            זהו התעתיק האוטומטי הראשון של כל אוסף התמונות הדיגיטליות של הגניזה
+            בספרייה הלאומית של ישראל. התעתיק נוצר באמצעות kraken גרסה 5.3.1.dev56.
+        </p>
+
+        <h4>מנהלי הפרויקט והתורמים</h4>
+        <div class="contributors">
+            <p><strong>מנהלי פרויקט:</strong></p>
+            <ul>
+                <li>Daniel Stoekl Ben Ezra - מנהל פרויקט</li>
+                <li>Marina Rustow - מנהלת פרויקט</li>
+                <li>Nachum Dershowitz - מנהל פרויקט</li>
+                <li>Avi Shmidman - מנהל פרויקט</li>
+            </ul>
+
+            <p><strong>מנהלת הפרויקט:</strong></p>
+            <ul>
+                <li>Judith Olszowy-Schlanger - מנהלת פרויקט</li>
+            </ul>
+
+            <p><strong>מנהל נתונים:</strong></p>
+            <ul>
+                <li>Hayim Lapin - מנהל נתונים</li>
+            </ul>
+
+            <p><strong>חברי פרויקט:</strong></p>
+            <ul>
+                <li>Luigi Bambaci</li>
+                <li>Benjamin Kiessling</li>
+                <li>Berat Kurar Barakat</li>
+                <li>Sharva Gogawale</li>
+                <li>Moshe Lavee</li>
+                <li>Tsafra Siew</li>
+                <li>Vered Raziel Kretzmer</li>
+                <li>Daria Vasyutinsky Shapira</li>
+                <li>Yitzchak Gila</li>
+            </ul>
+
+            <p><strong>מפרשנים:</strong></p>
+            <ul>
+                <li>Nurit Ezer</li>
+                <li>Elena Lolli</li>
+            </ul>
+        </div>
+
+        <h4>אודות התעתיק</h4>
+        <p>
+            תהליך התעתיק כלל שלושה שלבים:
+        </p>
+        <ol>
+            <li>מסווג תמונות לבחירת מודלים מיטביים לפילוח ולזיהוי טקסט</li>
+            <li>פילוח אזורים ושורות באמצעות kraken</li>
+            <li>זיהוי טקסט באמצעות kraken</li>
+        </ol>
+
+        <p>
+            <strong>הערה:</strong> זהו תעתיק אוטומטי ראשוני הכולל שגיאות בפילוח ובזיהוי הטקסט.
+            למרות זאת, הוא משוחרר בשל ערכו הגבוה למחקר גם בצורתו הנוכחית.
+            לחיפוש שבר לפי מספר 99, השתמש ב-<a href="https://www.ktiv.org" target="_blank" rel="noopener">KTIV</a>.
+        </p>
+
+        <h4>מימון</h4>
+        <p>
+            פרויקט זה ממומן על ידי האיחוד האירופי (ERC, MiDRASH, מספר פרויקט 101071829).
+            הדעות והעמדות המובעות הן של המחברים בלבד ואינן משקפות בהכרח את עמדת האיחוד האירופי
+            או סוכנות המועצה האירופית למחקר. לא האיחוד האירופי ולא רשות המענקים יכולים להיות אחראים להן.
+        </p>
+
+        <div class="links">
+            <p>
+                <a href="https://zenodo.org/records/17734473" target="_blank" rel="noopener" class="btn btn-secondary">
+                    עבור לפרויקט MiDRASH ב-Zenodo
+                </a>
+            </p>
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+
+{% block title %}סטטיסטיקה - גניזת קהיר{% endblock %}
+
+{% block content %}
+<div class="stats-page">
+    <h1>סטטיסטיקת אינדקס</h1>
+
+    <div class="stats-grid">
+        <div class="stat-card">
+            <h2>{{ "{:,}".format(stats.total_documents) }}</h2>
+            <p>סך מסמכים</p>
+        </div>
+
+        <div class="stat-card">
+            <h2>{{ "{:,}".format(stats.documents_with_annotations) }}</h2>
+            <p>מסמכים עם הערות</p>
+        </div>
+
+        <div class="stat-card">
+            <h2>{{ "%.1f"|format((stats.documents_with_annotations / stats.total_documents * 100)) }}%</h2>
+            <p>אחוז מסמכים עם הערות</p>
+        </div>
+
+        <div class="stat-card">
+            <h2>{{ stats.index_version }}</h2>
+            <p>גרסת אינדקס</p>
+        </div>
+    </div>
+
+    <div class="stats-info">
+        <h3>אודות האינדקס</h3>
+        <p>
+            אינדקס חיפוש זה מכיל תעתיקים מאוסף גניזת קהיר,
+            אוסף של שברי כתבי יד יהודיים שנמצאו בגניזה (חדר אחסון)
+            של בית הכנסת בן עזרא בקהיר, מצרים.
+        </p>
+        <p>
+            הטקסטים כוללים פרשנות דתית, משנה, מסמכים משפטיים, מכתבים,
+            וכתבי יד אחרים שנכתבו בעברית וביהודית-ערבית.
+        </p>
+    </div>
+
+    <a href="/" class="btn btn-primary">התחל לחפש</a>
+</div>
+{% endblock %}

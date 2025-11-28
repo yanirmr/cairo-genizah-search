@@ -1,0 +1,38 @@
+{% extends "base.html" %}
+
+{% block title %}{{ document.doc_id }} - גניזת קהיר{% endblock %}
+
+{% block content %}
+<div class="document-page">
+    <div class="document-header">
+        <h1>מסמך: {{ document.doc_id }}</h1>
+        <a href="javascript:history.back()" class="btn btn-secondary">חזור לתוצאות</a>
+    </div>
+
+    <div class="document-meta">
+        <div class="meta-grid">
+            <div class="meta-item">
+                <strong>מזהה מסמך:</strong> {{ document.doc_id }}
+            </div>
+            <div class="meta-item">
+                <strong>מספר שורות:</strong> {{ document.line_count }}
+            </div>
+            <div class="meta-item">
+                <strong>יש הערות:</strong>
+                {% if document.has_annotations %}
+                <span class="badge badge-yes">כן</span>
+                {% else %}
+                <span class="badge badge-no">לא</span>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <div class="document-content">
+        <h3>תוכן:</h3>
+        <div class="content-box rtl-text">
+            {{ document.content }}
+        </div>
+    </div>
+</div>
+{% endblock %}

@@ -1,0 +1,17 @@
+services:
+  - type: web
+    name: genizah-search
+    env: python
+    region: oregon
+    plan: starter  # $7/month, or use 'free' for free tier
+    buildCommand: pip install -r requirements-prod.txt && python -m genizah_search.indexer --input GenizaTranscriptions.txt --output index/ --quiet
+    startCommand: gunicorn -w 4 -b 0.0.0.0:$PORT genizah_search.app:app --timeout 120
+    envVars:
+      - key: PYTHON_VERSION
+        value: 3.11.0
+      - key: INDEX_PATH
+        value: index/
+    disk:
+      name: genizah-data
+      mountPath: /opt/render/project/src/index
+      sizeGB: 2
