@@ -60,9 +60,6 @@ dmypy.json
 *.sqlite
 *.sqlite3
 
-# Exclude large data file - will be uploaded separately
-GenizaTranscriptions.txt
-
 # Index will be built on deployment
 index/
 
