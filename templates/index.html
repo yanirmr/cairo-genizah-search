@@ -31,7 +31,7 @@
                     <select name="type" id="type" class="select-input">
                         <option value="fulltext">חיפוש טקסט מלא</option>
                         <option value="docid">מזהה מסמך</option>
-                        <option value="regex">דפוס רגולרי</option>
+                        <option value="regex">ביטוי רגולרי</option>
                     </select>
                 </div>
 
@@ -78,94 +78,40 @@
     <div class="help-section">
         <h3>דוגמאות חיפוש:</h3>
         <ul>
-            <li><strong>טקסט עברי:</strong> שבת, חלה, מעשרות</li>
-            <li><strong>מזהה מסמך:</strong> IE104549337 (השתמש בסוג חיפוש "מזהה מסמך")</li>
-            <li><strong>רגולר:</strong> Line \d+ (השתמש בסוג חיפוש "דפוס רגולרי")</li>
-            <li><strong>בוליאני:</strong> שבת AND חלה (חיפוש טקסט מלא)</li>
+            <li><strong>טקסט מלא:</strong> שבת, חלה, מעשרות (ניתן להשתמש באופרטורים בוליאניים: שבת AND חלה, כן OR לא)</li>
+            <li><strong>מזהה מסמך:</strong> IE104549337 </li>
+            <li><strong>ביטוי רגולרי:</strong> ^מ.*$ למציאת מילים המתחילות באות מ, או ש\w+ת למציאת מילים שמתחילות בש׳ ומסתיימות בת׳ </li>
         </ul>
     </div>
 
     <div class="credits-section">
         <h3>אודות כלי החיפוש</h3>
         <p>
-            כלי חיפוש זה פותח על ידי <strong>יניר מרמור</strong> לצורך גישה נוחה ומהירה לפרויקט החשוב והמקיף
-            <a href="https://zenodo.org/records/17734473" target="_blank" rel="noopener">MiDRASH - תעתיקים אוטומטיים של שברי גניזת קהיר</a>.
+            זהו <strong>כלי חיפוש דמו לא רשמי</strong> שפותח על ידי             לצורך גישה נוחה ומהירה למאגר הנתונים של פרויקט
+            <a href="https://zenodo.org/records/17734473" target="_blank" rel="noopener">MiDRASH</a>.
         </p>
 
-        <h4>פרויקט MiDRASH</h4>
+        <h4>אודות מאגר הנתונים</h4>
         <p>
-            זהו התעתיק האוטומטי הראשון של כל אוסף התמונות הדיגיטליות של הגניזה
-            בספרייה הלאומית של ישראל. התעתיק נוצר באמצעות kraken גרסה 5.3.1.dev56.
+            מאגר הנתונים מכיל תעתיקים אוטומטיים של פרגמנטים גניזת קהיר מהספרייה הלאומית של ישראל.
+            <strong>כל הזכויות על מאגר הנתונים והמודלים לתעתיקים שייכים לפרויקט MiDRASH.</strong>
         </p>
-
-        <h4>מנהלי הפרויקט והתורמים</h4>
-        <div class="contributors">
-            <p><strong>מנהלי פרויקט:</strong></p>
-            <ul>
-                <li>Daniel Stoekl Ben Ezra - מנהל פרויקט</li>
-                <li>Marina Rustow - מנהלת פרויקט</li>
-                <li>Nachum Dershowitz - מנהל פרויקט</li>
-                <li>Avi Shmidman - מנהל פרויקט</li>
-            </ul>
-
-            <p><strong>מנהלת הפרויקט:</strong></p>
-            <ul>
-                <li>Judith Olszowy-Schlanger - מנהלת פרויקט</li>
-            </ul>
-
-            <p><strong>מנהל נתונים:</strong></p>
-            <ul>
-                <li>Hayim Lapin - מנהל נתונים</li>
-            </ul>
-
-            <p><strong>חברי פרויקט:</strong></p>
-            <ul>
-                <li>Luigi Bambaci</li>
-                <li>Benjamin Kiessling</li>
-                <li>Berat Kurar Barakat</li>
-                <li>Sharva Gogawale</li>
-                <li>Moshe Lavee</li>
-                <li>Tsafra Siew</li>
-                <li>Vered Raziel Kretzmer</li>
-                <li>Daria Vasyutinsky Shapira</li>
-                <li>Yitzchak Gila</li>
-            </ul>
-
-            <p><strong>מפרשנים:</strong></p>
-            <ul>
-                <li>Nurit Ezer</li>
-                <li>Elena Lolli</li>
-            </ul>
-        </div>
-
-        <h4>אודות התעתיק</h4>
-        <p>
-            תהליך התעתיק כלל שלושה שלבים:
-        </p>
-        <ol>
-            <li>מסווג תמונות לבחירת מודלים מיטביים לפילוח ולזיהוי טקסט</li>
-            <li>פילוח אזורים ושורות באמצעות kraken</li>
-            <li>זיהוי טקסט באמצעות kraken</li>
-        </ol>
 
         <p>
-            <strong>הערה:</strong> זהו תעתיק אוטומטי ראשוני הכולל שגיאות בפילוח ובזיהוי הטקסט.
-            למרות זאת, הוא משוחרר בשל ערכו הגבוה למחקר גם בצורתו הנוכחית.
-            לחיפוש שבר לפי מספר 99, השתמש ב-<a href="https://www.ktiv.org" target="_blank" rel="noopener">KTIV</a>.
+            <strong>הערה:</strong> התעתיקים הם אוטומטיים וכוללים שגיאות בפילוח ובזיהוי הטקסט.
+            למרות זאת, הם בעלי ערך רב למחקר גם בצורתם הנוכחית.
+            לחיפוש קטע לפי מספר 99, השתמש ב-<a href="https://www.ktiv.org" target="_blank" rel="noopener">KTIV</a>.
         </p>
 
-        <h4>מימון</h4>
-        <p>
-            פרויקט זה ממומן על ידי האיחוד האירופי (ERC, MiDRASH, מספר פרויקט 101071829).
-            הדעות והעמדות המובעות הן של המחברים בלבד ואינן משקפות בהכרח את עמדת האיחוד האירופי
-            או סוכנות המועצה האירופית למחקר. לא האיחוד האירופי ולא רשות המענקים יכולים להיות אחראים להן.
-        </p>
-
+        <h4>קישורים ויצירת קשר</h4>
         <div class="links">
             <p>
                 <a href="https://zenodo.org/records/17734473" target="_blank" rel="noopener" class="btn btn-secondary">
-                    עבור לפרויקט MiDRASH ב-Zenodo
+                    מאגר הנתונים המלא ב-Zenodo
                 </a>
+            </p>
+            <p>
+                ליצירת קשר: <a href="mailto:yanirmr+genizah@gmail.com">yanirmr+genizah@gmail.com</a>
             </p>
         </div>
     </div>
