@@ -5,7 +5,7 @@ services:
     region: oregon
     plan: starter  # $7/month, or use 'free' for free tier
     buildCommand: pip install -r requirements-prod.txt
-    startCommand: gunicorn -w 4 -b 0.0.0.0:$PORT genizah_search.app:app --timeout 120
+    startCommand: python -m gunicorn -w 4 -b 0.0.0.0:$PORT genizah_search.app:app --timeout 120
     envVars:
       - key: PYTHON_VERSION
         value: 3.11.0
