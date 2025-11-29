@@ -162,7 +162,8 @@ def show_statistics(searcher):
     click.echo(f"Documents with Annotations: {stats['documents_with_annotations']:,}")
     pct = stats["documents_with_annotations"] / stats["total_documents"] * 100
     click.echo(f"Percentage with Annotations: {pct:.1f}%")
-    click.echo(f"Index Version: {stats['index_version']}")
+    if "last_updated" in stats and stats["last_updated"]:
+        click.echo(f"Last Updated: {stats['last_updated']}")
     click.echo()
 
 

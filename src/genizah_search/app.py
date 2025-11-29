@@ -80,7 +80,7 @@ def search():
     except FileNotFoundError:
         return render_template(
             "index.html",
-            error="אינדקס החיפוש לא נמצא. אנא בנה את האינדקס תחילה.",
+            error="מסד הנתונים לא נמצא. אנא בנה את מסד הנתונים תחילה.",
         )
     except ValueError as e:
         return render_template("index.html", error=f"שאילתת חיפוש לא תקינה: {e}")
@@ -103,7 +103,7 @@ def document(doc_id):
     except FileNotFoundError:
         return render_template(
             "error.html",
-            error="אינדקס החיפוש לא נמצא. אנא בנה את האינדקס תחילה.",
+            error="מסד הנתונים לא נמצא. אנא בנה את מסד הנתונים תחילה.",
         )
     except Exception as e:
         return render_template("error.html", error=f"שגיאה: {e}")
@@ -121,7 +121,7 @@ def stats():
     except FileNotFoundError:
         return render_template(
             "error.html",
-            error="אינדקס החיפוש לא נמצא. אנא בנה את האינדקס תחילה.",
+            error="מסד הנתונים לא נמצא. אנא בנה את מסד הנתונים תחילה.",
         )
     except Exception as e:
         return render_template("error.html", error=f"שגיאה: {e}")
@@ -158,7 +158,7 @@ def api_search():
         return jsonify({"query": query, "results": results_dict, "count": len(results)})
 
     except FileNotFoundError:
-        return jsonify({"error": "אינדקס לא נמצא"}), 500
+        return jsonify({"error": "מסד נתונים לא נמצא"}), 500
     except ValueError as e:
         return jsonify({"error": str(e)}), 400
     except Exception as e:
@@ -174,7 +174,7 @@ def api_stats():
         return jsonify(statistics)
 
     except FileNotFoundError:
-        return jsonify({"error": "אינדקס לא נמצא"}), 500
+        return jsonify({"error": "מסד נתונים לא נמצא"}), 500
     except Exception as e:
         return jsonify({"error": str(e)}), 500
 
@@ -192,11 +192,11 @@ def internal_error(e):
 
 
 if __name__ == "__main__":
-    # Check if index exists
-    index_dir = app.config["INDEX_DIR"]
-    if not Path(index_dir).exists():
-        print(f"אזהרה: תיקיית אינדקס '{index_dir}' לא נמצאה.")
-        print("אנא בנה את האינדקס תחילה באמצעות:")
-        print("  genizah-index -i GenizaTranscriptions.txt -o index/")
+    # Check if database exists
+    db_path = app.config["INDEX_DIR"]  # Can be directory or .db file
+    if not Path(db_path).exists():
+        print(f"אזהרה: מסד נתונים '{db_path}' לא נמצא.")
+        print("אנא בנה את מסד הנתונים תחילה באמצעות:")
+        print("  genizah-index -i GenizaTranscriptions.txt -o index/genizah.db")
 
     app.run(debug=True, host="0.0.0.0", port=5000)

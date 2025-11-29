@@ -8,12 +8,13 @@ A comprehensive search tool for exploring Cairo Genizah transcriptions. This pro
 
 ## Features
 
-- **Full-text Search**: Search across all document content with relevance ranking
+- **Full-text Search**: Search across all document content with BM25 relevance ranking
 - **Document ID Lookup**: Find documents by their unique identifiers
 - **Hebrew/Arabic Support**: Proper handling of right-to-left text and linguistic features
 - **Pattern Matching**: Advanced regex and pattern-based search for research
 - **Web Interface**: User-friendly browser-based interface
-- **Fast Indexing**: Efficient indexing of large datasets using Whoosh
+- **Fast & Efficient**: SQLite FTS5 indexing - 162K documents in ~734MB database
+- **Zero Dependencies**: Built-in SQLite - no external search engines required
 
 ## Installation
 
@@ -56,19 +57,26 @@ pip install -r requirements-dev.txt
 
 ## Usage
 
-### Building the Search Index
+### Building the Search Database
 
-Before searching, you need to index the transcriptions:
+Before searching, you need to index the transcriptions into a SQLite database:
 
 ```bash
-genizah-index --input GenizaTranscriptions.txt --output index/
+genizah-index --input GenizaTranscriptions.txt --output index/genizah.db
 ```
+
+This creates a SQLite FTS5 database with full-text search capabilities. For the full dataset (~390MB), this takes approximately 5-10 minutes and creates a ~734MB database.
+
+**Performance**: Indexes 162,198 documents with Hebrew and Judeo-Arabic text support.
 
 ### Running the Web Interface
 
 Start the web server:
 
 ```bash
+# Set the database path (optional, defaults to index/)
+export INDEX_PATH=index/genizah.db
+
 python -m genizah_search.app
 ```
 
@@ -77,7 +85,14 @@ Then open your browser to `http://localhost:5000`
 ### Command Line Search
 
 ```bash
-genizah-search --query "your search term" --index index/
+# Full-text search
+genizah-search --query "משנה" --index index/genizah.db
+
+# Document ID search
+genizah-search --query "990000" --type docid --index index/genizah.db
+
+# Show statistics
+genizah-search --stats --index index/genizah.db --query dummy
 ```
 
 ## Development

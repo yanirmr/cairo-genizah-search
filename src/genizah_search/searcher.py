@@ -2,11 +2,10 @@
 
 import re
 from dataclasses import dataclass
+from pathlib import Path
 from typing import List, Optional
 
-from whoosh import highlight, index
-from whoosh.qparser import QueryParser
-from whoosh.query import Term
+from genizah_search.db import GenizahDatabase
 
 
 @dataclass
@@ -24,22 +23,29 @@ class SearchResult:
 class GenizahSearcher:
     """Search engine for Genizah documents."""
 
-    def __init__(self, index_dir: str):
-        """Initialize searcher with index directory.
+    def __init__(self, db_path: str):
+        """Initialize searcher with database path.
 
         Args:
-            index_dir: Path to the Whoosh index directory
+            db_path: Path to the SQLite database file or directory
 
         Raises:
-            FileNotFoundError: If index doesn't exist
+            FileNotFoundError: If database doesn't exist
         """
-        self.index_dir = index_dir
-        if not index.exists_in(index_dir):
+        self.db_path = Path(db_path)
+
+        # If path is a directory, look for genizah.db
+        if self.db_path.is_dir():
+            self.db_path = self.db_path / "genizah.db"
+
+        if not self.db_path.exists():
             raise FileNotFoundError(
-                f"Index not found in {index_dir}. "
+                f"Database not found at {self.db_path}. "
                 f"Please build the index first using the indexer."
             )
-        self.idx = index.open_dir(index_dir)
+
+        self.db = GenizahDatabase(str(self.db_path), enable_wal=True)
+        self.db.connect()
 
     def search(
         self,
@@ -71,7 +77,7 @@ class GenizahSearcher:
             )
 
     def _fulltext_search(self, query: str, limit: int, with_highlights: bool) -> List[SearchResult]:
-        """Perform full-text search.
+        """Perform full-text search using FTS5.
 
         Args:
             query: Search query string
@@ -82,39 +88,72 @@ class GenizahSearcher:
             List of SearchResult objects
         """
         results = []
+        cursor = self.db.conn.cursor()
 
-        with self.idx.searcher() as searcher:
-            # Create a parser for the content field
-            parser = QueryParser("content", schema=self.idx.schema)
-            q = parser.parse(query)
+        # Convert query to FTS5 format (mostly pass-through, Whoosh and FTS5 are similar)
+        fts_query = self._convert_query_to_fts5(query)
 
-            # Search
-            search_results = searcher.search(q, limit=limit)
+        # Build SQL query with BM25 ranking
+        if with_highlights:
+            # Use snippet() for highlighting
+            sql = """
+                SELECT d.doc_id, d.content, d.line_count, d.has_annotations,
+                       bm25(documents_fts) as score,
+                       snippet(documents_fts, 1, '<b>', '</b>', '...', 15) as snippet
+                FROM documents d
+                JOIN documents_fts ON d.rowid = documents_fts.rowid
+                WHERE documents_fts MATCH ?
+                ORDER BY score
+                LIMIT ?
+            """
+            cursor.execute(sql, (fts_query, limit))
+        else:
+            sql = """
+                SELECT d.doc_id, d.content, d.line_count, d.has_annotations,
+                       bm25(documents_fts) as score
+                FROM documents d
+                JOIN documents_fts ON d.rowid = documents_fts.rowid
+                WHERE documents_fts MATCH ?
+                ORDER BY score
+                LIMIT ?
+            """
+            cursor.execute(sql, (fts_query, limit))
 
-            # Configure highlighter if needed
+        for row in cursor.fetchall():
+            highlights_text = None
             if with_highlights:
-                search_results.highlighter = highlight.Highlighter(
-                    fragmenter=highlight.ContextFragmenter(maxchars=200, surround=50)
-                )
+                # Extract snippet from query result
+                highlights_text = row["snippet"] if row["snippet"] else None
 
-            for hit in search_results:
-                # Get highlights if requested
-                highlights_text = None
-                if with_highlights:
-                    highlights_text = hit.highlights("content", top=3)
-
-                results.append(
-                    SearchResult(
-                        doc_id=hit["doc_id"],
-                        content=hit["content"],
-                        line_count=hit["line_count"],
-                        has_annotations=hit["has_annotations"],
-                        score=hit.score,
-                        highlights=highlights_text,
-                    )
+            results.append(
+                SearchResult(
+                    doc_id=row["doc_id"],
+                    content=row["content"],
+                    line_count=row["line_count"],
+                    has_annotations=bool(row["has_annotations"]),
+                    score=abs(row["score"]),  # BM25 returns negative scores
+                    highlights=highlights_text,
                 )
+            )
 
         return results
+
+    def _convert_query_to_fts5(self, query: str) -> str:
+        """Convert query to FTS5 format.
+
+        Whoosh and FTS5 query syntax are similar, so mostly pass through.
+        Both support AND, OR, NOT, wildcards (*).
+
+        Args:
+            query: Original query string
+
+        Returns:
+            FTS5-compatible query string
+        """
+        # FTS5 and Whoosh query syntax are very similar
+        # Both support: AND, OR, NOT, wildcards (*)
+        # Main difference: FTS5 uses double quotes for phrases
+        return query
 
     def _docid_search(self, query: str, limit: int) -> List[SearchResult]:
         """Search by document ID (exact or partial match).
@@ -127,30 +166,29 @@ class GenizahSearcher:
             List of SearchResult objects
         """
         results = []
+        cursor = self.db.conn.cursor()
 
-        with self.idx.searcher() as searcher:
-            # Use wildcard search for partial matches
-            if "*" not in query:
-                # Add wildcard to end for partial matches
-                query = f"*{query}*"
+        # Use LIKE for partial matching
+        like_pattern = f"%{query}%"
 
-            # Parse the query
-            parser = QueryParser("doc_id", schema=self.idx.schema)
-            q = parser.parse(query)
+        sql = """
+            SELECT doc_id, content, line_count, has_annotations
+            FROM documents
+            WHERE doc_id LIKE ?
+            LIMIT ?
+        """
+        cursor.execute(sql, (like_pattern, limit))
 
-            # Search
-            search_results = searcher.search(q, limit=limit)
-
-            for hit in search_results:
-                results.append(
-                    SearchResult(
-                        doc_id=hit["doc_id"],
-                        content=hit["content"],
-                        line_count=hit["line_count"],
-                        has_annotations=hit["has_annotations"],
-                        score=hit.score,
-                    )
+        for row in cursor.fetchall():
+            results.append(
+                SearchResult(
+                    doc_id=row["doc_id"],
+                    content=row["content"],
+                    line_count=row["line_count"],
+                    has_annotations=bool(row["has_annotations"]),
+                    score=1.0,  # No relevance scoring for ID search
                 )
+            )
 
         return results
 
@@ -171,25 +209,29 @@ class GenizahSearcher:
         except re.error as e:
             raise ValueError(f"Invalid regex pattern: {e}")
 
-        with self.idx.searcher() as searcher:
-            # We need to iterate through all documents for regex search
-            count = 0
-            for doc in searcher.documents():
-                if count >= limit:
-                    break
+        cursor = self.db.conn.cursor()
 
-                # Check if content matches the regex
-                if regex.search(doc["content"]):
-                    results.append(
-                        SearchResult(
-                            doc_id=doc["doc_id"],
-                            content=doc["content"],
-                            line_count=doc["line_count"],
-                            has_annotations=doc["has_annotations"],
-                            score=1.0,  # Regex doesn't have relevance scoring
-                        )
+        # Stream all documents and filter with regex
+        # This is O(N) but unavoidable for regex search
+        cursor.execute("SELECT doc_id, content, line_count, has_annotations FROM documents")
+
+        count = 0
+        for row in cursor:
+            if count >= limit:
+                break
+
+            # Check if content matches the regex
+            if regex.search(row["content"]):
+                results.append(
+                    SearchResult(
+                        doc_id=row["doc_id"],
+                        content=row["content"],
+                        line_count=row["line_count"],
+                        has_annotations=bool(row["has_annotations"]),
+                        score=1.0,  # Regex doesn't have relevance scoring
                     )
-                    count += 1
+                )
+                count += 1
 
         return results
 
@@ -202,20 +244,24 @@ class GenizahSearcher:
         Returns:
             SearchResult object or None if not found
         """
-        with self.idx.searcher() as searcher:
-            # Use Term query for exact match
-            q = Term("doc_id", doc_id)
-            results = searcher.search(q, limit=1)
+        cursor = self.db.conn.cursor()
 
-            if results:
-                hit = results[0]
-                return SearchResult(
-                    doc_id=hit["doc_id"],
-                    content=hit["content"],
-                    line_count=hit["line_count"],
-                    has_annotations=hit["has_annotations"],
-                    score=hit.score,
-                )
+        sql = """
+            SELECT doc_id, content, line_count, has_annotations
+            FROM documents
+            WHERE doc_id = ?
+        """
+        cursor.execute(sql, (doc_id,))
+        row = cursor.fetchone()
+
+        if row:
+            return SearchResult(
+                doc_id=row["doc_id"],
+                content=row["content"],
+                line_count=row["line_count"],
+                has_annotations=bool(row["has_annotations"]),
+                score=1.0,
+            )
 
         return None
 
@@ -225,19 +271,26 @@ class GenizahSearcher:
         Returns:
             Dictionary with index statistics
         """
-        with self.idx.searcher() as searcher:
-            total_docs = searcher.doc_count_all()
+        cursor = self.db.conn.cursor()
 
-            # Count documents with annotations
-            q = Term("has_annotations", True)
-            annotated = searcher.search(q, limit=None)
-            annotated_count = len(annotated)
+        # Get total document count
+        cursor.execute("SELECT COUNT(*) FROM documents")
+        total_docs = cursor.fetchone()[0]
 
-            return {
-                "total_documents": total_docs,
-                "documents_with_annotations": annotated_count,
-                "index_version": self.idx.latest_generation(),
-            }
+        # Count documents with annotations
+        cursor.execute("SELECT COUNT(*) FROM documents WHERE has_annotations = 1")
+        annotated_count = cursor.fetchone()[0]
+
+        # Get metadata
+        cursor.execute("SELECT value FROM index_metadata WHERE key='last_updated'")
+        last_updated_row = cursor.fetchone()
+        last_updated = last_updated_row[0] if last_updated_row else None
+
+        return {
+            "total_documents": total_docs,
+            "documents_with_annotations": annotated_count,
+            "last_updated": last_updated,
+        }
 
     def advanced_search(
         self,
@@ -260,47 +313,80 @@ class GenizahSearcher:
             List of SearchResult objects
         """
         results = []
+        cursor = self.db.conn.cursor()
 
-        with self.idx.searcher() as searcher:
-            # Build the query
-            from whoosh.query import And, NumericRange
+        # Build dynamic WHERE clause
+        conditions = []
+        params = []
 
-            queries = []
+        # Add text query if provided
+        if query:
+            fts_query = self._convert_query_to_fts5(query)
+            conditions.append("documents_fts MATCH ?")
+            params.append(fts_query)
 
-            # Add text query if provided
-            if query:
-                parser = QueryParser("content", schema=self.idx.schema)
-                queries.append(parser.parse(query))
+        # Add annotation filter
+        if has_annotations is not None:
+            conditions.append("d.has_annotations = ?")
+            params.append(1 if has_annotations else 0)
 
-            # Add annotation filter
-            if has_annotations is not None:
-                queries.append(Term("has_annotations", has_annotations))
+        # Add line count filters
+        if min_line_count is not None:
+            conditions.append("d.line_count >= ?")
+            params.append(min_line_count)
 
-            # Add line count filters
-            if min_line_count is not None or max_line_count is not None:
-                start = min_line_count if min_line_count is not None else 0
-                # Use a very large number instead of infinity (Whoosh limitation)
-                end = max_line_count if max_line_count is not None else 999999
-                queries.append(NumericRange("line_count", start, end))
+        if max_line_count is not None:
+            conditions.append("d.line_count <= ?")
+            params.append(max_line_count)
 
-            # Combine queries
-            if len(queries) == 1:
-                final_query = queries[0]
-            else:
-                final_query = And(queries)
+        # Build SQL query
+        if query:
+            # Use FTS5 for text search
+            sql = f"""
+                SELECT d.doc_id, d.content, d.line_count, d.has_annotations,
+                       bm25(documents_fts) as score
+                FROM documents d
+                JOIN documents_fts ON d.rowid = documents_fts.rowid
+                WHERE {' AND '.join(conditions)}
+                ORDER BY score
+                LIMIT ?
+            """
+        else:
+            # No text search, just filters
+            sql = f"""
+                SELECT doc_id, content, line_count, has_annotations,
+                       0.0 as score
+                FROM documents d
+                WHERE {' AND '.join(conditions) if conditions else '1=1'}
+                LIMIT ?
+            """
 
-            # Search
-            search_results = searcher.search(final_query, limit=limit)
+        params.append(limit)
+        cursor.execute(sql, params)
 
-            for hit in search_results:
-                results.append(
-                    SearchResult(
-                        doc_id=hit["doc_id"],
-                        content=hit["content"],
-                        line_count=hit["line_count"],
-                        has_annotations=hit["has_annotations"],
-                        score=hit.score,
-                    )
+        for row in cursor.fetchall():
+            results.append(
+                SearchResult(
+                    doc_id=row["doc_id"],
+                    content=row["content"],
+                    line_count=row["line_count"],
+                    has_annotations=bool(row["has_annotations"]),
+                    score=abs(row["score"]) if query else 1.0,
                 )
+            )
 
         return results
+
+    def close(self):
+        """Close the database connection."""
+        if self.db:
+            self.db.close()
+
+    def __enter__(self):
+        """Context manager entry."""
+        return self
+
+    def __exit__(self, exc_type, exc_val, exc_tb):
+        """Context manager exit."""
+        self.close()
+        return False
