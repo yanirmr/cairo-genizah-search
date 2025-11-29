@@ -94,14 +94,27 @@ The CI runs on Python 3.9, 3.10, 3.11, and 3.12 to ensure compatibility.
 
 ### Running Tests Locally
 
+Run all tests:
 ```bash
 pytest
+```
+
+Run only end-to-end tests:
+```bash
+pytest tests/test_e2e.py
 ```
 
 With coverage report:
 ```bash
 pytest --cov=src/genizah_search --cov-report=term-missing
 ```
+
+The test suite includes:
+- **Unit tests**: Individual module testing (parser, indexer, searcher, app, CLI)
+- **End-to-end tests**: Complete workflow testing using sample data (37 tests)
+- **Sample data**: `tests/sample_genizah_data.txt` contains 11 representative documents for testing
+
+See `tests/README.md` for detailed test documentation.
 
 ### Code Formatting
 
