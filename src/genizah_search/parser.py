@@ -5,8 +5,13 @@ extracting individual documents with their IDs and content.
 """
 
 import re
+import time
 from dataclasses import dataclass
 from typing import Iterator, Optional
+
+from .logging_config import get_logger
+
+logger = get_logger(__name__)
 
 
 @dataclass
@@ -53,6 +58,7 @@ class GenizahParser:
             file_path: Path to the GenizaTranscriptions.txt file
         """
         self.file_path = file_path
+        logger.info(f"GenizahParser initialized with file: {file_path}")
 
     def parse(self, strip_line_numbers: bool = True) -> Iterator[Document]:
         """Parse the transcription file and yield documents.
@@ -63,34 +69,59 @@ class GenizahParser:
         Yields:
             Document objects containing parsed data
         """
+        start_time = time.time()
+        logger.info(f"Starting parse of {self.file_path}, strip_line_numbers={strip_line_numbers}")
+
         current_doc_id: Optional[str] = None
         current_lines: list[str] = []
+        doc_count = 0
 
-        with open(self.file_path, "r", encoding="utf-8") as f:
-            for line in f:
-                line = line.rstrip("\n")
+        try:
+            with open(self.file_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    line = line.rstrip("\n")
 
-                # Check if this is a document header
-                header_match = self.DOCUMENT_HEADER_PATTERN.match(line)
+                    # Check if this is a document header
+                    header_match = self.DOCUMENT_HEADER_PATTERN.match(line)
 
-                if header_match:
-                    # If we were processing a document, yield it
-                    if current_doc_id is not None:
-                        yield self._create_document(
-                            current_doc_id, current_lines, strip_line_numbers
-                        )
+                    if header_match:
+                        # If we were processing a document, yield it
+                        if current_doc_id is not None:
+                            yield self._create_document(
+                                current_doc_id, current_lines, strip_line_numbers
+                            )
+                            doc_count += 1
 
-                    # Start new document
-                    current_doc_id = header_match.group(1)
-                    current_lines = []
-                else:
-                    # Add line to current document (skip empty lines at start)
-                    if current_doc_id is not None:
-                        current_lines.append(line)
+                            # Log progress every 100 documents
+                            if doc_count % 100 == 0:
+                                logger.debug(f"Parsed {doc_count} documents so far")
 
-            # Don't forget the last document
-            if current_doc_id is not None:
-                yield self._create_document(current_doc_id, current_lines, strip_line_numbers)
+                        # Start new document
+                        current_doc_id = header_match.group(1)
+                        current_lines = []
+                        logger.debug(f"Found document header: {current_doc_id}")
+                    else:
+                        # Add line to current document (skip empty lines at start)
+                        if current_doc_id is not None:
+                            current_lines.append(line)
+
+                # Don't forget the last document
+                if current_doc_id is not None:
+                    yield self._create_document(current_doc_id, current_lines, strip_line_numbers)
+                    doc_count += 1
+
+            duration = time.time() - start_time
+            logger.info(f"Parse completed: {doc_count} documents parsed in {duration:.2f}s")
+
+        except FileNotFoundError:
+            logger.error(f"File not found: {self.file_path}")
+            raise
+        except UnicodeDecodeError as e:
+            logger.error(f"Unicode decode error while parsing {self.file_path}: {e}")
+            raise
+        except Exception as e:
+            logger.error(f"Unexpected error during parsing: {type(e).__name__}: {e}")
+            raise
 
     def _create_document(self, doc_id: str, lines: list[str], strip_line_numbers: bool) -> Document:
         """Create a Document object from parsed data.
@@ -103,37 +134,47 @@ class GenizahParser:
         Returns:
             Document object
         """
-        # Optionally strip line numbers from each line before processing
-        if strip_line_numbers:
-            processed_lines = []
-            for line in lines:
-                # Check if line starts with line number format: spaces + number + →
-                match = re.match(r"^\s+\d+→", line)
-                if match:
-                    # Remove the line number prefix
-                    processed_lines.append(line[match.end() :])
-                else:
-                    processed_lines.append(line)
-            lines = processed_lines
+        try:
+            # Optionally strip line numbers from each line before processing
+            if strip_line_numbers:
+                processed_lines = []
+                for line in lines:
+                    # Check if line starts with line number format: spaces + number + →
+                    match = re.match(r"^\s+\d+→", line)
+                    if match:
+                        # Remove the line number prefix
+                        processed_lines.append(line[match.end() :])
+                    else:
+                        processed_lines.append(line)
+                lines = processed_lines
 
-        # Join lines and strip leading/trailing whitespace from the entire content
-        content = "\n".join(lines).strip()
+            # Join lines and strip leading/trailing whitespace from the entire content
+            content = "\n".join(lines).strip()
 
-        # Count non-empty lines
-        line_count = sum(1 for line in lines if line.strip())
+            # Count non-empty lines
+            line_count = sum(1 for line in lines if line.strip())
 
-        # Check for annotations
-        has_annotations = bool(self.ANNOTATION_PATTERN.search(content))
+            # Check for annotations
+            has_annotations = bool(self.ANNOTATION_PATTERN.search(content))
 
-        # Create document
-        doc = Document(
-            doc_id=doc_id,
-            content=content,
-            line_count=line_count,
-            has_annotations=has_annotations,
-        )
+            # Create document
+            doc = Document(
+                doc_id=doc_id,
+                content=content,
+                line_count=line_count,
+                has_annotations=has_annotations,
+            )
 
-        return doc
+            logger.debug(
+                f"Created document: id={doc_id}, lines={line_count}, "
+                f"annotations={has_annotations}, content_length={len(content)}"
+            )
+
+            return doc
+
+        except Exception as e:
+            logger.error(f"Error creating document {doc_id}: {type(e).__name__}: {e}")
+            raise
 
     def count_documents(self) -> int:
         """Count total number of documents in the file.
@@ -141,9 +182,23 @@ class GenizahParser:
         Returns:
             Number of documents
         """
-        count = 0
-        with open(self.file_path, "r", encoding="utf-8") as f:
-            for line in f:
-                if self.DOCUMENT_HEADER_PATTERN.match(line):
-                    count += 1
-        return count
+        start_time = time.time()
+        logger.info(f"Starting document count for {self.file_path}")
+
+        try:
+            count = 0
+            with open(self.file_path, "r", encoding="utf-8") as f:
+                for line in f:
+                    if self.DOCUMENT_HEADER_PATTERN.match(line):
+                        count += 1
+
+            duration = time.time() - start_time
+            logger.info(f"Document count completed: {count} documents found in {duration:.2f}s")
+            return count
+
+        except FileNotFoundError:
+            logger.error(f"File not found: {self.file_path}")
+            raise
+        except Exception as e:
+            logger.error(f"Error counting documents: {type(e).__name__}: {e}")
+            raise

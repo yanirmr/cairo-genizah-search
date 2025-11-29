@@ -1,13 +1,17 @@
 """Indexer for building the Whoosh search index from Genizah transcriptions."""
 
 import sys
+import time
 from pathlib import Path
 
 import click
 from whoosh import index
 from whoosh.fields import BOOLEAN, ID, NUMERIC, TEXT, Schema
 
+from genizah_search.logging_config import get_logger
 from genizah_search.parser import GenizahParser
+
+logger = get_logger(__name__)
 
 
 class GenizahIndexer:
@@ -21,6 +25,7 @@ class GenizahIndexer:
         """
         self.index_dir = Path(index_dir)
         self.schema = self._create_schema()
+        logger.info(f"GenizahIndexer initialized with index_dir: {index_dir}")
 
     def _create_schema(self) -> Schema:
         """Create the Whoosh schema for Genizah documents.
@@ -46,8 +51,10 @@ class GenizahIndexer:
 
         # Create or open the index
         if index.exists_in(str(self.index_dir)):
+            logger.info(f"Opening existing index at {self.index_dir}")
             return index.open_dir(str(self.index_dir))
         else:
+            logger.info(f"Creating new index at {self.index_dir}")
             return index.create_in(str(self.index_dir), self.schema)
 
     def build_index(
@@ -63,13 +70,21 @@ class GenizahIndexer:
         Returns:
             Number of documents indexed
         """
+        start_time = time.time()
+        logger.info(
+            f"Starting index build: file={transcription_file}, "
+            f"strip_line_numbers={strip_line_numbers}, show_progress={show_progress}"
+        )
+
         parser = GenizahParser(transcription_file)
         idx = self.create_index()
 
         # Get total document count for progress
+        total_docs = 0
         if show_progress:
             total_docs = parser.count_documents()
             click.echo(f"Indexing {total_docs} documents...")
+            logger.info(f"Total documents to index: {total_docs}")
 
         writer = idx.writer()
         doc_count = 0
@@ -91,12 +106,27 @@ class GenizahIndexer:
                     click.echo(f"Indexed {doc_count}/{total_docs} documents...", nl=False)
                     click.echo("\r", nl=False)  # Carriage return to overwrite line
 
+                # Log progress every 500 documents
+                if doc_count % 500 == 0:
+                    logger.info(f"Indexing progress: {doc_count} documents processed")
+
+            logger.info("Committing index changes...")
             writer.commit()
+
+            duration = time.time() - start_time
+            docs_per_sec = doc_count / duration if duration > 0 else 0
+
+            logger.info(
+                f"Index build completed: {doc_count} documents indexed in {duration:.2f}s "
+                f"({docs_per_sec:.1f} docs/sec)"
+            )
 
             if show_progress:
                 click.echo(f"\nSuccessfully indexed {doc_count} documents!")
 
         except Exception as e:
+            logger.error(f"Error during index build: {type(e).__name__}: {e}")
+            logger.info("Cancelling index writer transaction")
             writer.cancel()
             raise e
 
@@ -112,10 +142,12 @@ class GenizahIndexer:
             FileNotFoundError: If index doesn't exist
         """
         if not index.exists_in(str(self.index_dir)):
+            logger.error(f"Index not found in {self.index_dir}")
             raise FileNotFoundError(
                 f"Index not found in {self.index_dir}. "
                 f"Please build the index first using the indexer."
             )
+        logger.debug(f"Opened index from {self.index_dir}")
         return index.open_dir(str(self.index_dir))
 
 
@@ -153,6 +185,16 @@ def main(input_file: str, output_dir: str, keep_line_numbers: bool, quiet: bool)
     Example:
         genizah-index -i GenizaTranscriptions.txt -o index/
     """
+    # Initialize logging
+    from genizah_search.logging_config import setup_logging
+
+    setup_logging()
+
+    logger.info(
+        f"CLI invoked: input={input_file}, output={output_dir}, "
+        f"keep_line_numbers={keep_line_numbers}, quiet={quiet}"
+    )
+
     try:
         indexer = GenizahIndexer(output_dir)
         strip_line_numbers = not keep_line_numbers
@@ -165,8 +207,12 @@ def main(input_file: str, output_dir: str, keep_line_numbers: bool, quiet: bool)
         if not quiet:
             index_size = sum(f.stat().st_size for f in Path(output_dir).rglob("*") if f.is_file())
             click.echo(f"Index size: {index_size / 1024 / 1024:.2f} MB")
+            logger.info(f"Index size: {index_size / 1024 / 1024:.2f} MB")
+
+        logger.info("Index build command completed successfully")
 
     except Exception as e:
+        logger.error(f"Index build failed: {type(e).__name__}: {e}", exc_info=True)
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
