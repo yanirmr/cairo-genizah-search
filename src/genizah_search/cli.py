@@ -4,7 +4,12 @@ import sys
 
 import click
 
+from genizah_search.logging_config import get_logger, setup_logging
 from genizah_search.searcher import GenizahSearcher
+
+# Initialize logging
+setup_logging()
+logger = get_logger(__name__)
 
 
 @click.command()
@@ -100,11 +105,18 @@ def main(
         # Show index statistics
         genizah-search --stats
     """
+    logger.info(
+        f"CLI invoked: query='{query}', index={index_dir}, type={search_type}, "
+        f"limit={limit}, annotations={annotations}, min_lines={min_lines}, "
+        f"max_lines={max_lines}, stats={stats}"
+    )
+
     try:
         searcher = GenizahSearcher(index_dir)
 
         # Show statistics if requested
         if stats:
+            logger.info("Displaying index statistics")
             show_statistics(searcher)
             return
 
@@ -114,6 +126,7 @@ def main(
 
         if has_annotation_filter or has_line_filter:
             # Use advanced search
+            logger.info("Using advanced search with filters")
             annotation_value = None
             if annotations == "yes":
                 annotation_value = True
@@ -129,6 +142,7 @@ def main(
             )
         else:
             # Use regular search
+            logger.info(f"Using regular search: type={search_type}")
             with_highlights = not no_highlights and search_type == "fulltext"
             results = searcher.search(
                 query=query,
@@ -138,9 +152,12 @@ def main(
             )
 
         # Display results
+        logger.info(f"Search completed: {len(results)} results found")
         display_results(results, full=full, show_highlights=not no_highlights)
+        logger.info("CLI search completed successfully")
 
     except FileNotFoundError as e:
+        logger.error(f"CLI search failed - index not found: {e}")
         click.echo(f"Error: {e}", err=True)
         click.echo(
             "\nPlease build the index first using: "
@@ -149,6 +166,7 @@ def main(
         )
         sys.exit(1)
     except Exception as e:
+        logger.error(f"CLI search failed: {type(e).__name__}: {e}", exc_info=True)
         click.echo(f"Error: {e}", err=True)
         sys.exit(1)
 
