@@ -1,59 +1,53 @@
-"""Indexer for building the Whoosh search index from Genizah transcriptions."""
+"""Indexer for building the SQLite FTS5 search database from Genizah transcriptions."""
 
 import sys
 from pathlib import Path
 
 import click
-from whoosh import index
-from whoosh.fields import BOOLEAN, ID, NUMERIC, TEXT, Schema
 
+from genizah_search.db import GenizahDatabase
 from genizah_search.parser import GenizahParser
 
 
 class GenizahIndexer:
-    """Builds and manages the Whoosh search index for Genizah documents."""
+    """Builds and manages the SQLite FTS5 search database for Genizah documents."""
 
-    def __init__(self, index_dir: str):
-        """Initialize indexer with index directory.
+    def __init__(self, db_path: str):
+        """Initialize indexer with database path.
 
         Args:
-            index_dir: Directory to store the Whoosh index
+            db_path: Path to SQLite database file or directory
+                    If directory, uses genizah.db as filename
         """
-        self.index_dir = Path(index_dir)
-        self.schema = self._create_schema()
+        self.db_path = Path(db_path)
 
-    def _create_schema(self) -> Schema:
-        """Create the Whoosh schema for Genizah documents.
-
-        Returns:
-            Whoosh Schema object
-        """
-        return Schema(
-            doc_id=ID(stored=True, unique=True),  # Unique document identifier
-            content=TEXT(stored=True),  # Full document text (searchable and stored)
-            line_count=NUMERIC(stored=True),  # Number of lines in document
-            has_annotations=BOOLEAN(stored=True),  # Contains editorial marks
-        )
-
-    def create_index(self) -> index.Index:
-        """Create a new index or open existing one.
-
-        Returns:
-            Whoosh Index object
-        """
-        # Create directory if it doesn't exist
-        self.index_dir.mkdir(parents=True, exist_ok=True)
-
-        # Create or open the index
-        if index.exists_in(str(self.index_dir)):
-            return index.open_dir(str(self.index_dir))
+        # If path is a directory, use default filename
+        if self.db_path.is_dir() or not self.db_path.suffix:
+            self.db_path.mkdir(parents=True, exist_ok=True)
+            self.db_path = self.db_path / "genizah.db"
         else:
-            return index.create_in(str(self.index_dir), self.schema)
+            # Ensure parent directory exists
+            self.db_path.parent.mkdir(parents=True, exist_ok=True)
+
+        self.db = GenizahDatabase(str(self.db_path))
+
+    def create_database(self) -> GenizahDatabase:
+        """Create a new database or open existing one.
+
+        Returns:
+            GenizahDatabase object
+        """
+        self.db.connect()
+        self.db.initialize_schema()
+        return self.db
 
     def build_index(
-        self, transcription_file: str, strip_line_numbers: bool = True, show_progress: bool = True
+        self,
+        transcription_file: str,
+        strip_line_numbers: bool = True,
+        show_progress: bool = True,
     ) -> int:
-        """Build the search index from transcription file.
+        """Build the search database from transcription file.
 
         Args:
             transcription_file: Path to GenizaTranscriptions.txt
@@ -64,24 +58,29 @@ class GenizahIndexer:
             Number of documents indexed
         """
         parser = GenizahParser(transcription_file)
-        idx = self.create_index()
+        db = self.create_database()
+        conn = db.connect()
 
         # Get total document count for progress
         if show_progress:
             total_docs = parser.count_documents()
             click.echo(f"Indexing {total_docs} documents...")
 
-        writer = idx.writer()
+        cursor = conn.cursor()
         doc_count = 0
+
+        # Use transaction for better performance
+        cursor.execute("BEGIN TRANSACTION")
 
         try:
             for doc in parser.parse(strip_line_numbers=strip_line_numbers):
-                # Add document to index
-                writer.add_document(
-                    doc_id=doc.doc_id,
-                    content=doc.content,
-                    line_count=doc.line_count,
-                    has_annotations=doc.has_annotations,
+                # Insert document (triggers will update FTS table automatically)
+                cursor.execute(
+                    """
+                    INSERT INTO documents (doc_id, content, line_count, has_annotations)
+                    VALUES (?, ?, ?, ?)
+                """,
+                    (doc.doc_id, doc.content, doc.line_count, doc.has_annotations),
                 )
 
                 doc_count += 1
@@ -91,32 +90,65 @@ class GenizahIndexer:
                     click.echo(f"Indexed {doc_count}/{total_docs} documents...", nl=False)
                     click.echo("\r", nl=False)  # Carriage return to overwrite line
 
-            writer.commit()
+                # Commit every 1000 documents to avoid huge transactions
+                if doc_count % 1000 == 0:
+                    conn.commit()
+                    cursor.execute("BEGIN TRANSACTION")
+
+            # Final commit
+            conn.commit()
+
+            # Update metadata
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO index_metadata (key, value)
+                VALUES ('document_count', ?)
+            """,
+                (str(doc_count),),
+            )
+
+            cursor.execute(
+                """
+                INSERT OR REPLACE INTO index_metadata (key, value)
+                VALUES ('last_updated', datetime('now'))
+            """
+            )
+
+            conn.commit()
+
+            # Optimize FTS index
+            if show_progress:
+                click.echo("\nOptimizing search index...")
+            cursor.execute("INSERT INTO documents_fts(documents_fts) VALUES('optimize')")
+            conn.commit()
 
             if show_progress:
-                click.echo(f"\nSuccessfully indexed {doc_count} documents!")
+                click.echo(f"Successfully indexed {doc_count} documents!")
 
         except Exception as e:
-            writer.cancel()
+            conn.rollback()
             raise e
 
         return doc_count
 
-    def get_index(self) -> index.Index:
-        """Get the existing index.
+    def get_database(self) -> GenizahDatabase:
+        """Get the existing database.
 
         Returns:
-            Whoosh Index object
+            GenizahDatabase object
 
         Raises:
-            FileNotFoundError: If index doesn't exist
+            FileNotFoundError: If database doesn't exist
         """
-        if not index.exists_in(str(self.index_dir)):
+        if not self.db_path.exists():
             raise FileNotFoundError(
-                f"Index not found in {self.index_dir}. "
+                f"Database not found at {self.db_path}. "
                 f"Please build the index first using the indexer."
             )
-        return index.open_dir(str(self.index_dir))
+
+        db = GenizahDatabase(str(self.db_path))
+        db.connect()
+        return db
 
 
 @click.command()
@@ -131,10 +163,10 @@ class GenizahIndexer:
 @click.option(
     "--output",
     "-o",
-    "output_dir",
+    "output_path",
     required=True,
     type=click.Path(),
-    help="Directory to store the search index",
+    help="Path to SQLite database file or directory (default filename: genizah.db)",
 )
 @click.option(
     "--keep-line-numbers",
@@ -147,14 +179,14 @@ class GenizahIndexer:
     is_flag=True,
     help="Suppress progress output",
 )
-def main(input_file: str, output_dir: str, keep_line_numbers: bool, quiet: bool):
-    """Build the Genizah search index from transcription file.
+def main(input_file: str, output_path: str, keep_line_numbers: bool, quiet: bool):
+    """Build the Genizah search database from transcription file.
 
     Example:
-        genizah-index -i GenizaTranscriptions.txt -o index/
+        genizah-index -i GenizaTranscriptions.txt -o index/genizah.db
     """
     try:
-        indexer = GenizahIndexer(output_dir)
+        indexer = GenizahIndexer(output_path)
         strip_line_numbers = not keep_line_numbers
         show_progress = not quiet
 
@@ -163,8 +195,8 @@ def main(input_file: str, output_dir: str, keep_line_numbers: bool, quiet: bool)
         )
 
         if not quiet:
-            index_size = sum(f.stat().st_size for f in Path(output_dir).rglob("*") if f.is_file())
-            click.echo(f"Index size: {index_size / 1024 / 1024:.2f} MB")
+            db_size = indexer.db_path.stat().st_size
+            click.echo(f"Database size: {db_size / 1024 / 1024:.2f} MB")
 
     except Exception as e:
         click.echo(f"Error: {e}", err=True)

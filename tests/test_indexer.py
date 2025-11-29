@@ -4,7 +4,6 @@ import tempfile
 from pathlib import Path
 
 import pytest
-from whoosh import index
 
 from genizah_search.indexer import GenizahIndexer
 
@@ -37,10 +36,33 @@ Just plain text
 
 
 @pytest.fixture
-def temp_index_dir():
-    """Create a temporary directory for the index."""
+def temp_db_path():
+    """Create a temporary database file path."""
+    temp_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    temp_file.close()
+    temp_path = temp_file.name
+
+    yield temp_path
+
+    # Cleanup
+    Path(temp_path).unlink(missing_ok=True)
+
+
+def test_indexer_initialization(temp_db_path):
+    """Test indexer initialization."""
+    indexer = GenizahIndexer(temp_db_path)
+    assert indexer.db_path == Path(temp_db_path)
+    assert indexer.db is not None
+
+
+def test_indexer_with_directory_path():
+    """Test indexer with directory path creates genizah.db."""
+    import tempfile
+
     temp_dir = tempfile.mkdtemp()
-    yield temp_dir
+    indexer = GenizahIndexer(temp_dir)
+
+    assert indexer.db_path == Path(temp_dir) / "genizah.db"
 
     # Cleanup
     import shutil
@@ -48,25 +70,20 @@ def temp_index_dir():
     shutil.rmtree(temp_dir, ignore_errors=True)
 
 
-def test_indexer_initialization(temp_index_dir):
-    """Test indexer initialization."""
-    indexer = GenizahIndexer(temp_index_dir)
-    assert indexer.index_dir == Path(temp_index_dir)
-    assert indexer.schema is not None
+def test_create_database(temp_db_path):
+    """Test database creation."""
+    indexer = GenizahIndexer(temp_db_path)
+    db = indexer.create_database()
+
+    assert db is not None
+    assert indexer.db_path.exists()
+
+    db.close()
 
 
-def test_create_index(temp_index_dir):
-    """Test index creation."""
-    indexer = GenizahIndexer(temp_index_dir)
-    idx = indexer.create_index()
-
-    assert idx is not None
-    assert index.exists_in(temp_index_dir)
-
-
-def test_build_index(sample_transcription_file, temp_index_dir):
+def test_build_index(sample_transcription_file, temp_db_path):
     """Test building the index from a transcription file."""
-    indexer = GenizahIndexer(temp_index_dir)
+    indexer = GenizahIndexer(temp_db_path)
 
     # Build the index
     doc_count = indexer.build_index(
@@ -74,118 +91,203 @@ def test_build_index(sample_transcription_file, temp_index_dir):
     )
 
     assert doc_count == 3
-    assert index.exists_in(temp_index_dir)
+    assert indexer.db_path.exists()
+
+    indexer.db.close()
 
 
-def test_index_content(sample_transcription_file, temp_index_dir):
+def test_index_content(sample_transcription_file, temp_db_path):
     """Test that index contains the correct documents."""
-    indexer = GenizahIndexer(temp_index_dir)
+    indexer = GenizahIndexer(temp_db_path)
     indexer.build_index(sample_transcription_file, show_progress=False)
 
-    # Open the index and search for documents
-    idx = indexer.get_index()
+    # Get the database
+    db = indexer.get_database()
+    cursor = db.conn.cursor()
 
-    with idx.searcher() as searcher:
-        # Check total documents
-        assert searcher.doc_count_all() == 3
+    # Check total documents
+    cursor.execute("SELECT COUNT(*) FROM documents")
+    assert cursor.fetchone()[0] == 3
 
-        # Check specific document
-        doc = searcher.document(doc_id="DOC001")
-        assert doc is not None
-        assert "First document" in doc["content"]
-        assert doc["line_count"] == 2  # Two non-empty lines
-        assert doc["has_annotations"] is False
+    # Check specific document
+    cursor.execute("SELECT * FROM documents WHERE doc_id='DOC001'")
+    row = cursor.fetchone()
+    assert row is not None
+    assert "First document" in row["content"]
+    assert row["line_count"] == 2  # Two non-empty lines
+    assert row["has_annotations"] == 0  # False
 
-        # Check document with annotations
-        doc2 = searcher.document(doc_id="DOC002")
-        assert doc2 is not None
-        assert "annotations" in doc2["content"]
-        assert doc2["has_annotations"] is True
+    # Check document with annotations
+    cursor.execute("SELECT * FROM documents WHERE doc_id='DOC002'")
+    row = cursor.fetchone()
+    assert row is not None
+    assert "annotations" in row["content"]
+    assert row["has_annotations"] == 1  # True
 
-        # Check document without line numbers
-        doc3 = searcher.document(doc_id="DOC003")
-        assert doc3 is not None
-        assert "Simple document" in doc3["content"]
+    # Check document without line numbers
+    cursor.execute("SELECT * FROM documents WHERE doc_id='DOC003'")
+    row = cursor.fetchone()
+    assert row is not None
+    assert "Simple document" in row["content"]
+
+    db.close()
+    indexer.db.close()
 
 
-def test_index_with_line_numbers(sample_transcription_file, temp_index_dir):
+def test_index_with_line_numbers(sample_transcription_file, temp_db_path):
     """Test building index with line numbers preserved."""
-    indexer = GenizahIndexer(temp_index_dir)
+    indexer = GenizahIndexer(temp_db_path)
     indexer.build_index(sample_transcription_file, strip_line_numbers=False, show_progress=False)
 
-    idx = indexer.get_index()
+    db = indexer.get_database()
+    cursor = db.conn.cursor()
 
-    with idx.searcher() as searcher:
-        doc = searcher.document(doc_id="DOC001")
-        # Line numbers should be present
-        assert "1→" in doc["content"]
+    cursor.execute("SELECT content FROM documents WHERE doc_id='DOC001'")
+    row = cursor.fetchone()
+    # Line numbers should be present
+    assert "1→" in row["content"]
+
+    db.close()
+    indexer.db.close()
 
 
-def test_get_index_not_exists(temp_index_dir):
-    """Test getting index when it doesn't exist."""
-    indexer = GenizahIndexer(temp_index_dir)
+def test_get_database_not_exists():
+    """Test getting database when it doesn't exist."""
+    import tempfile
+
+    # Use a path that doesn't exist (don't create the file)
+    temp_path = str(Path(tempfile.gettempdir()) / "nonexistent_db_test.db")
+
+    # Make sure it doesn't exist
+    Path(temp_path).unlink(missing_ok=True)
+
+    indexer = GenizahIndexer(temp_path)
 
     with pytest.raises(FileNotFoundError):
-        indexer.get_index()
+        indexer.get_database()
 
 
-def test_search_by_doc_id(sample_transcription_file, temp_index_dir):
-    """Test searching by document ID."""
-    indexer = GenizahIndexer(temp_index_dir)
+def test_fts_search(sample_transcription_file, temp_db_path):
+    """Test FTS5 full-text search."""
+    indexer = GenizahIndexer(temp_db_path)
     indexer.build_index(sample_transcription_file, show_progress=False)
 
-    idx = indexer.get_index()
+    db = indexer.get_database()
+    cursor = db.conn.cursor()
 
-    with idx.searcher() as searcher:
-        from whoosh.query import Term
+    # Search for content using FTS5
+    cursor.execute(
+        """
+        SELECT doc_id FROM documents_fts
+        WHERE documents_fts MATCH 'annotations'
+    """
+    )
+    results = cursor.fetchall()
 
-        # Search for specific document ID
-        query = Term("doc_id", "DOC002")
-        results = searcher.search(query)
+    assert len(results) >= 1
+    assert results[0]["doc_id"] == "DOC002"
 
-        assert len(results) == 1
-        assert results[0]["doc_id"] == "DOC002"
+    db.close()
+    indexer.db.close()
 
 
-def test_full_text_search(sample_transcription_file, temp_index_dir):
-    """Test full-text search."""
-    indexer = GenizahIndexer(temp_index_dir)
+def test_database_schema():
+    """Test that database has the correct schema."""
+    import tempfile
+
+    temp_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    temp_path = temp_file.name
+    temp_file.close()
+
+    try:
+        indexer = GenizahIndexer(temp_path)
+        db = indexer.create_database()
+        cursor = db.conn.cursor()
+
+        # Check documents table exists with correct columns
+        cursor.execute("PRAGMA table_info(documents)")
+        columns = {row[1] for row in cursor.fetchall()}
+        assert "doc_id" in columns
+        assert "content" in columns
+        assert "line_count" in columns
+        assert "has_annotations" in columns
+
+        # Check FTS table exists
+        cursor.execute("SELECT name FROM sqlite_master WHERE type='table' AND name='documents_fts'")
+        assert cursor.fetchone() is not None
+
+        db.close()
+    finally:
+        Path(temp_path).unlink(missing_ok=True)
+
+
+def test_index_reopen(sample_transcription_file, temp_db_path):
+    """Test reopening an existing database."""
+    indexer = GenizahIndexer(temp_db_path)
     indexer.build_index(sample_transcription_file, show_progress=False)
 
-    idx = indexer.get_index()
+    # Create a new indexer instance with the same path
+    indexer2 = GenizahIndexer(temp_db_path)
+    db = indexer2.get_database()
+    cursor = db.conn.cursor()
 
-    with idx.searcher() as searcher:
-        from whoosh.qparser import QueryParser
+    # Should open existing database
+    cursor.execute("SELECT COUNT(*) FROM documents")
+    assert cursor.fetchone()[0] == 3
 
-        # Search for content
-        parser = QueryParser("content", schema=indexer.schema)
-        query = parser.parse("annotations")
-        results = searcher.search(query)
-
-        assert len(results) >= 1
-        assert results[0]["doc_id"] == "DOC002"
-
-
-def test_schema_fields():
-    """Test that schema has the correct fields."""
-    indexer = GenizahIndexer("dummy")
-    schema = indexer.schema
-
-    assert "doc_id" in schema
-    assert "content" in schema
-    assert "line_count" in schema
-    assert "has_annotations" in schema
+    db.close()
+    indexer.db.close()
+    indexer2.db.close()
 
 
-def test_index_reopen(sample_transcription_file, temp_index_dir):
-    """Test reopening an existing index."""
-    indexer = GenizahIndexer(temp_index_dir)
+def test_metadata_tracking(sample_transcription_file, temp_db_path):
+    """Test that metadata is tracked correctly."""
+    indexer = GenizahIndexer(temp_db_path)
     indexer.build_index(sample_transcription_file, show_progress=False)
 
-    # Create a new indexer instance with the same directory
-    indexer2 = GenizahIndexer(temp_index_dir)
-    idx = indexer2.create_index()
+    db = indexer.get_database()
+    cursor = db.conn.cursor()
 
-    # Should open existing index
-    with idx.searcher() as searcher:
-        assert searcher.doc_count_all() == 3
+    # Check document count metadata
+    cursor.execute("SELECT value FROM index_metadata WHERE key='document_count'")
+    row = cursor.fetchone()
+    assert row is not None
+    assert int(row[0]) == 3
+
+    # Check last_updated metadata
+    cursor.execute("SELECT value FROM index_metadata WHERE key='last_updated'")
+    row = cursor.fetchone()
+    assert row is not None
+
+    db.close()
+    indexer.db.close()
+
+
+def test_fts_triggers(sample_transcription_file, temp_db_path):
+    """Test that FTS triggers keep tables in sync."""
+    indexer = GenizahIndexer(temp_db_path)
+    indexer.build_index(sample_transcription_file, show_progress=False)
+
+    db = indexer.get_database()
+    cursor = db.conn.cursor()
+
+    # Check that FTS table has same number of documents
+    cursor.execute("SELECT COUNT(*) FROM documents")
+    main_count = cursor.fetchone()[0]
+
+    cursor.execute("SELECT COUNT(*) FROM documents_fts")
+    fts_count = cursor.fetchone()[0]
+
+    assert main_count == fts_count == 3
+
+    # Verify FTS content matches main table
+    cursor.execute("SELECT doc_id, content FROM documents WHERE doc_id='DOC001'")
+    main_doc = cursor.fetchone()
+
+    cursor.execute("SELECT doc_id, content FROM documents_fts WHERE doc_id='DOC001'")
+    fts_doc = cursor.fetchone()
+
+    assert main_doc["content"] == fts_doc["content"]
+
+    db.close()
+    indexer.db.close()

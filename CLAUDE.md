@@ -60,35 +60,57 @@ When building tools for this repository, typical tasks might include:
 
 ### Technology Stack
 
-- **Search Engine**: Whoosh (pure Python, good for file size, handles multi-user with locking)
+- **Search Engine**: SQLite FTS5 (built-in, BM25 ranking, zero dependencies)
+- **Database**: SQLite with WAL mode for better concurrency
 - **Web Framework**: Flask
 - **Text Processing**: python-bidi, arabic-reshaper for RTL handling
 - **Frontend**: Simple HTML/CSS/JS with RTL support
 
-### Index Schema
+### Database Schema
 
-```python
-{
-    'doc_id': ID,           # Unique document identifier
-    'content': TEXT,        # Full document text (stored, searchable)
-    'line_count': NUMERIC,  # Number of lines in document
-    'has_annotations': BOOLEAN  # Contains editorial marks (⟦/⟧)
-}
+**Main Documents Table:**
+```sql
+CREATE TABLE documents (
+    doc_id TEXT PRIMARY KEY,
+    content TEXT NOT NULL,
+    line_count INTEGER NOT NULL,
+    has_annotations BOOLEAN NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);
 ```
+
+**FTS5 Virtual Table:**
+```sql
+CREATE VIRTUAL TABLE documents_fts USING fts5(
+    doc_id UNINDEXED,
+    content,
+    content=documents,
+    content_rowid=rowid,
+    tokenize='unicode61 remove_diacritics 0'  -- Preserves Hebrew vowel points
+);
+```
+
+**Key Features:**
+- Triggers keep FTS table in sync with main table
+- BM25 relevance ranking for search results
+- Unicode61 tokenizer with diacritics preserved for Hebrew/Arabic
+- Metadata table for statistics tracking
 
 ### Module Structure
 
+- `db.py`: SQLite database schema and connection management
 - `parser.py`: Extract documents from GenizaTranscriptions.txt
-- `indexer.py`: Build Whoosh search index
-- `searcher.py`: Search functionality (full-text, ID lookup, regex)
+- `indexer.py`: Build SQLite FTS5 database
+- `searcher.py`: Search functionality (FTS5 full-text, ID lookup, regex)
 - `app.py`: Flask web application
 - `cli.py`: Command-line interface
 
 ### Common Commands
 
-Build the search index:
+Build the search database:
 ```bash
-python -m genizah_search.indexer --input GenizaTranscriptions.txt --output index/
+python -m genizah_search.indexer --input GenizaTranscriptions.txt --output index/genizah.db
+# Or: genizah-index -i GenizaTranscriptions.txt -o index/genizah.db
 ```
 
 Run the web application:

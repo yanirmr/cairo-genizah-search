@@ -51,26 +51,28 @@ Line 10
 
 @pytest.fixture
 def indexed_data(sample_transcription_file):
-    """Create and populate a test index."""
-    temp_dir = tempfile.mkdtemp()
+    """Create and populate a test database."""
+    temp_file = tempfile.NamedTemporaryFile(suffix=".db", delete=False)
+    temp_file.close()
+    temp_path = temp_file.name
 
     # Build the index
-    indexer = GenizahIndexer(temp_dir)
+    indexer = GenizahIndexer(temp_path)
     indexer.build_index(sample_transcription_file, show_progress=False)
+    indexer.db.close()
 
-    yield temp_dir
+    yield temp_path
 
     # Cleanup
-    import shutil
-
-    shutil.rmtree(temp_dir, ignore_errors=True)
+    Path(temp_path).unlink(missing_ok=True)
 
 
 def test_searcher_initialization(indexed_data):
     """Test searcher initialization."""
     searcher = GenizahSearcher(indexed_data)
-    assert searcher.index_dir == indexed_data
-    assert searcher.idx is not None
+    assert searcher.db_path == Path(indexed_data)
+    assert searcher.db is not None
+    searcher.close()
 
 
 def test_searcher_initialization_no_index():
@@ -91,6 +93,8 @@ def test_fulltext_search(indexed_data):
     assert "שלום" in results[0].content
     assert isinstance(results[0].score, float)
 
+    searcher.close()
+
 
 def test_fulltext_search_with_highlights(indexed_data):
     """Test full-text search with highlights."""
@@ -103,6 +107,8 @@ def test_fulltext_search_with_highlights(indexed_data):
     # Check that highlights are included
     assert results[0].highlights is not None
 
+    searcher.close()
+
 
 def test_fulltext_search_no_highlights(indexed_data):
     """Test full-text search without highlights."""
@@ -113,6 +119,8 @@ def test_fulltext_search_no_highlights(indexed_data):
     assert len(results) >= 1
     assert results[0].highlights is None
 
+    searcher.close()
+
 
 def test_docid_search_exact(indexed_data):
     """Test document ID search with exact match."""
@@ -122,6 +130,8 @@ def test_docid_search_exact(indexed_data):
 
     assert len(results) == 1
     assert results[0].doc_id == "DOC002"
+
+    searcher.close()
 
 
 def test_docid_search_partial(indexed_data):
@@ -137,6 +147,8 @@ def test_docid_search_partial(indexed_data):
     assert "DOC002" in doc_ids
     assert "DOC003" in doc_ids
 
+    searcher.close()
+
 
 def test_regex_search(indexed_data):
     """Test regex search."""
@@ -148,6 +160,8 @@ def test_regex_search(indexed_data):
     assert len(results) >= 1
     assert results[0].doc_id == "DOC004"
 
+    searcher.close()
+
 
 def test_regex_search_invalid_pattern(indexed_data):
     """Test regex search with invalid pattern."""
@@ -155,6 +169,8 @@ def test_regex_search_invalid_pattern(indexed_data):
 
     with pytest.raises(ValueError):
         searcher.search("[invalid(regex", search_type="regex")
+
+    searcher.close()
 
 
 def test_get_document(indexed_data):
@@ -168,6 +184,8 @@ def test_get_document(indexed_data):
     assert "Simple document" in doc.content
     assert doc.has_annotations is False
 
+    searcher.close()
+
 
 def test_get_document_not_found(indexed_data):
     """Test getting a non-existent document."""
@@ -176,6 +194,8 @@ def test_get_document_not_found(indexed_data):
     doc = searcher.get_document("NONEXISTENT")
 
     assert doc is None
+
+    searcher.close()
 
 
 def test_get_statistics(indexed_data):
@@ -186,7 +206,9 @@ def test_get_statistics(indexed_data):
 
     assert stats["total_documents"] == 4
     assert stats["documents_with_annotations"] == 1
-    assert "index_version" in stats
+    assert "last_updated" in stats
+
+    searcher.close()
 
 
 def test_advanced_search_with_annotations(indexed_data):
@@ -200,6 +222,8 @@ def test_advanced_search_with_annotations(indexed_data):
     assert results[0].doc_id == "DOC002"
     assert results[0].has_annotations is True
 
+    searcher.close()
+
 
 def test_advanced_search_without_annotations(indexed_data):
     """Test advanced search filtering for documents without annotations."""
@@ -211,6 +235,8 @@ def test_advanced_search_without_annotations(indexed_data):
     assert len(results) >= 3
     for result in results:
         assert result.has_annotations is False
+
+    searcher.close()
 
 
 def test_advanced_search_line_count(indexed_data):
@@ -224,6 +250,8 @@ def test_advanced_search_line_count(indexed_data):
     for result in results:
         assert result.line_count >= 5
 
+    searcher.close()
+
 
 def test_advanced_search_line_count_range(indexed_data):
     """Test advanced search filtering by line count range."""
@@ -235,6 +263,8 @@ def test_advanced_search_line_count_range(indexed_data):
     assert len(results) >= 1
     for result in results:
         assert 1 <= result.line_count <= 3
+
+    searcher.close()
 
 
 def test_advanced_search_combined_filters(indexed_data):
@@ -250,6 +280,8 @@ def test_advanced_search_combined_filters(indexed_data):
     assert results[0].doc_id == "DOC002"
     assert results[0].has_annotations is True
 
+    searcher.close()
+
 
 def test_search_limit(indexed_data):
     """Test that search respects the limit parameter."""
@@ -260,6 +292,8 @@ def test_search_limit(indexed_data):
 
     assert len(results) <= 2
 
+    searcher.close()
+
 
 def test_search_invalid_type(indexed_data):
     """Test search with invalid search type."""
@@ -267,6 +301,8 @@ def test_search_invalid_type(indexed_data):
 
     with pytest.raises(ValueError):
         searcher.search("test", search_type="invalid_type")
+
+    searcher.close()
 
 
 def test_search_result_dataclass():

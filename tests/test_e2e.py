@@ -129,9 +129,9 @@ class TestE2EIndexing:
         assert index_path.exists()
         assert index_path.is_dir()
 
-        # Check for Whoosh index files
-        index_files = list(index_path.glob("*.toc"))
-        assert len(index_files) > 0, "No index TOC file found"
+        # Check for SQLite database file
+        db_file = index_path / "genizah.db"
+        assert db_file.exists(), "No database file found"
 
     def test_index_statistics(self, test_index_dir):
         """Test index statistics."""
@@ -139,7 +139,9 @@ class TestE2EIndexing:
         stats = searcher.get_statistics()
 
         assert stats["total_documents"] == 11
-        assert "index_version" in stats
+        assert "last_updated" in stats
+
+        searcher.close()
 
     def test_index_contains_all_documents(self, test_index_dir, sample_data_file):
         """Test that index contains all documents from source file."""

@@ -23,7 +23,6 @@ classifiers = [
 
 dependencies = [
     "flask>=3.0.0",
-    "whoosh>=2.7.4",
     "python-bidi>=0.4.2",  # For bidirectional text support
     "arabic-reshaper>=3.0.0",  # For proper Arabic text handling
     "pyyaml>=6.0",
